@@ -16,9 +16,9 @@ Read the data off a .wav file
 
 int main() {
 
-	FILE *file = fopen("test.wav", "rb");
+    FILE *file = fopen("test.wav", "rb");
 
-	WavFile  wav;
+    WavFile  wav;
     WavError error = WavFile_readMinimal(&wav, file);
 
     // Data is found in WavFile.Data.data.data
@@ -28,7 +28,7 @@ int main() {
     // Length of the data
     uint32_t pcm_data_length = wav.Data.dataSize / sizeof(int16_t);
 
-	return 0;
+    return 0;
 }
 ```
 

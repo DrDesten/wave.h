@@ -2,33 +2,55 @@
 
 I wrote this library because [Tinywav](https://github.com/mhroth/tinywav) doesn't handle the RIFF container correctly.
 
-Currently can only properly read 16bit integer PCM .wav files and does not handle multiple channels.  
-It simply gives you the raw data.
+Currently does not handle multiple channels, it simply gives you the raw data.
 
 ## Usage
 
 Read the data off a .wav file
 
 ```c
-#include <stdint.h>
-#include <stdio.h>
+...
 #include "wave.h"
 
 int main() {
 
-    FILE *file = fopen("test.wav", "rb");
+	FILE *file = fopen("test.wav", "rb");
 
-    WavFile  wav;
+	WavFile  wav;
     WavError error = WavFile_readMinimal(&wav, file);
 
-    // Data is found in WavFile.Data.data.data
-    int16_t* pcm_data = wav.Data.data.data;
-    // Size of the data in bytes
-    uint32_t pcm_data_size = wav.Data.dataSize;
-    // Length of the data
-    uint32_t pcm_data_length = wav.Data.dataSize / sizeof(int16_t);
+    wav.Data.data;     // Sample Data               (void*)
+    wav.Data.dataSize; // Size of the data in bytes (uint32_t)
 
-    return 0;
+	return 0;
 }
 ```
 
+Read all RIFF chunks off a .wav file
+
+```c
+...
+#include "wave.h"
+
+int main() {
+
+	FILE *file = fopen("test.wav", "rb");
+
+	WavFile   wav;
+    WavChunks chunks;
+    WavError  error = WavFile_read(&wav, &chunks, file);
+
+    // 1st Data chunk
+    wav.Data.data;     // Sample Data                 (void*)
+    wav.Data.dataSize; // Size of the data in bytes   (uint32_t)
+
+    // All other chunks
+    chunks.length;     // Number of chunks            (uint32_t)
+    WavChunk chunk = chunks.data[...];
+    chunk.tag;         // RIFF tag of chunk           (uint8_t[4])
+    chunk.size;        // Size in bytes of chunk data (uint32_t)
+    chunk.data;        // Chunk data                  (void*)
+
+	return 0;
+}
+```

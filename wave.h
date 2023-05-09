@@ -14,10 +14,6 @@ extern "C" {
 
 
 typedef struct {
-	int16_t *data;
-} WavData;
-
-typedef struct {
 	struct WavDescriptorChunk {
 		uint8_t  RIFF[4];
 		uint32_t fileSize;
@@ -38,7 +34,7 @@ typedef struct {
 	struct WavDataChunk {
 		uint8_t  DATA[4];
 		uint32_t dataSize;
-		WavData  data;
+		void*    data;
 	} Data;
 } WavFile;
 
@@ -93,8 +89,8 @@ static WavError WavFile_readMinimal(WavFile* wavfile, FILE* file) {
 	fread(&wavfile->Data.dataSize, sizeof(wavfile->Data.dataSize), 1, file);
 
 	// Read the Data
-	wavfile->Data.data.data = (int16_t*) malloc(wavfile->Data.dataSize);
-	fread(wavfile->Data.data.data, wavfile->Data.dataSize, 1, file);
+	wavfile->Data.data = malloc(wavfile->Data.dataSize);
+	fread(wavfile->Data.data, wavfile->Data.dataSize, 1, file);
 
     return WAV_SUCCESS;
 }
@@ -160,7 +156,7 @@ static WavError WavFile_read(WavFile* wavfile, WavChunks* chunks, FILE* file) {
 
             // Write size and data
             wavfile->Data.dataSize = size;
-            wavfile->Data.data.data = (int16_t*) data; 
+            wavfile->Data.data = data; 
 
             foundData = true;
 

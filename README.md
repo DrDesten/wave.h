@@ -14,15 +14,15 @@ Read the data off a .wav file
 
 int main() {
 
-	FILE *file = fopen("test.wav", "rb");
+    FILE *file = fopen("test.wav", "rb");
 
-	WavFile  wav;
+    WavFile  wav;
     WavError error = WavFile_readMinimal(&wav, file);
 
     wav.Data.data;     // Sample Data               (void*)
     wav.Data.dataSize; // Size of the data in bytes (uint32_t)
 
-	return 0;
+    return 0;
 }
 ```
 
@@ -34,9 +34,9 @@ Read all RIFF chunks off a .wav file
 
 int main() {
 
-	FILE *file = fopen("test.wav", "rb");
+    FILE *file = fopen("test.wav", "rb");
 
-	WavFile   wav;
+    WavFile   wav;
     WavChunks chunks;
     WavError  error = WavFile_read(&wav, &chunks, file);
 
@@ -51,6 +51,6 @@ int main() {
     chunk.size;        // Size in bytes of chunk data (uint32_t)
     chunk.data;        // Chunk data                  (void*)
 
-	return 0;
+    return 0;
 }
 ```

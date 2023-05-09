@@ -12,6 +12,13 @@
 extern "C" {
 #endif
 
+/* enum WavFormatType {
+    WAV_PCM_8,
+    WAV_PCM_16,
+    WAV_PCM_24,
+    WAV_PCM_32F,
+};
+typedef uint8_t WavFormatType; */
 
 typedef struct {
 	struct WavDescriptorChunk {
@@ -122,9 +129,10 @@ static WavError WavFile_read(WavFile* wavfile, WavChunks* chunks, FILE* file) {
         wavfile->Format.FMT[2] != 't' || wavfile->Format.FMT[3] != ' ')
 		return WAV_NO_FORMAT;
 
-    // Prepare dynamic array
+    // Prepare dynamic array and allocate a generous initial capacity
+    uint32_t chunksCapacity = 32;
     chunks->length          = 0;
-    uint32_t chunksCapacity = 0;
+    chunks->data            = (WavChunk*) malloc(sizeof(WavChunk) * chunksCapacity);
 
 	// Read Chunks
     bool foundData = false;
@@ -162,7 +170,7 @@ static WavError WavFile_read(WavFile* wavfile, WavChunks* chunks, FILE* file) {
 
         // Handle other tags
         } else {
-            // Allocate new chunk
+            // Create new chunk
             WavChunk chunk;
 
             // Write tag
@@ -175,14 +183,8 @@ static WavError WavFile_read(WavFile* wavfile, WavChunks* chunks, FILE* file) {
             chunk.size = size;
             chunk.data = data;
 
-            // Allocate for dynamic array
+            // Reallocate dynamic array
             if (chunksCapacity <= chunks->length) {
-                // Allocate a generous amount the first time around
-                if (chunksCapacity == 0) {
-                    chunks->data   = (WavChunk*) malloc(sizeof(WavChunk) * 32);
-                    chunksCapacity = 32;
-                }
-
                 // Double Capacity when insufficent
                 chunksCapacity *= 2;
                 chunks->data    = (WavChunk*) reallocarray(chunks->data, chunksCapacity, sizeof(WavChunk));

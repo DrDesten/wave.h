@@ -6,19 +6,17 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* enum WavFormatType {
-    WAV_PCM_8,
-    WAV_PCM_16,
-    WAV_PCM_24,
-    WAV_PCM_32F,
-};
-typedef uint8_t WavFormatType; */
+typedef enum {
+    WAV_PCM = 1,
+    WAV_FLOAT = 3,
+} WavFormatType;
 
 typedef struct {
 	struct WavDescriptorChunk {
@@ -67,6 +65,11 @@ static WavError WavFile_readMinimal(WavFile* wavfile, FILE* file) {
 	if (wavfile->Format.FMT[0] != 'f' || wavfile->Format.FMT[1] != 'm' ||
         wavfile->Format.FMT[2] != 't' || wavfile->Format.FMT[3] != ' ')
 		return WAV_NO_FORMAT;
+    
+    // Seek forward to the data chunk if format is longer
+    if (wavfile->Format.formatSize > 16) {
+        fseek(file, wavfile->Format.formatSize - 16, SEEK_CUR);
+    }
 
 	// Read first Data Chunk
     // Search file, skipping non-data chunks
@@ -128,6 +131,11 @@ static WavError WavFile_read(WavFile* wavfile, WavChunks* chunks, FILE* file) {
 	if (wavfile->Format.FMT[0] != 'f' || wavfile->Format.FMT[1] != 'm' ||
         wavfile->Format.FMT[2] != 't' || wavfile->Format.FMT[3] != ' ')
 		return WAV_NO_FORMAT;
+    
+    // Seek forward to the data chunk if format is longer
+    if (wavfile->Format.formatSize > 16) {
+        fseek(file, wavfile->Format.formatSize - 16, SEEK_CUR);
+    }
 
     // Prepare dynamic array and allocate a generous initial capacity
     uint32_t chunksCapacity = 32;
@@ -201,7 +209,6 @@ static WavError WavFile_read(WavFile* wavfile, WavChunks* chunks, FILE* file) {
     // Return with the appropiate error code
     return foundData ? WAV_SUCCESS : WAV_NO_DATA;
 }
-
 
 static void WavFile_print(WavFile* wavfile) {
 	printf("RIFF:         '%.4s'\n", wavfile->Descriptor.RIFF);

@@ -81,6 +81,13 @@ struct WavFile {
         }
     } Chunks;
 
+    ~WavFile() {
+        free(Data.data);
+        for (int64_t i = 0; i < Chunks.length; i++)
+            free(Chunks.data[i].data);
+        free(Chunks.data);
+    }
+
   private:
     static WavError readHeader(WavFile* wavfile, FILE* file) {
         // Read Descriptor

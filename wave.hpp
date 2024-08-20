@@ -9,6 +9,24 @@
 #include <stdlib.h>
 #include <string.h>
 
+template <typename T>
+void readFile(T* dst, FILE* file) {
+    fread(dst, sizeof(T), 1, file);
+}
+template <typename T>
+void readFile(T* dst, size_t size, FILE* file) {
+    fread(dst, size, 1, file);
+}
+
+template <typename T>
+void writeFile(T* dst, FILE* file) {
+    fwrite(dst, sizeof(T), 1, file);
+}
+template <typename T>
+void writeFile(T* dst, size_t size, FILE* file) {
+    fwrite(dst, size, 1, file);
+}
+
 enum WavError : uint8_t {
     SUCCESS = 0,
     INVALID_DESCRIPTOR,
@@ -27,7 +45,8 @@ enum WavChannelLayout : uint8_t {
     SPLIT,
 };
 
-template <typename T> struct WavData {
+template <typename T>
+struct WavData {
     uint32_t channels;
     uint32_t samples;
     T**      data;
@@ -40,6 +59,10 @@ template <typename T> struct WavData {
 };
 
 struct WavFile {
+    static constexpr const uint8_t RIFF[4] = {'R', 'I', 'F', 'F'};
+    static constexpr const uint8_t WAVE[4] = {'W', 'A', 'V', 'E'};
+    static constexpr const uint8_t fmt[4]  = {'f', 'm', 't', ' '};
+
   public:
     struct Descriptor {
         uint8_t  RIFF[4];
@@ -60,7 +83,7 @@ struct WavFile {
 
     struct Data {
         uint8_t  DATA[4];
-        uint32_t dataSize;
+        uint32_t size;
         void*    data;
     } Data;
 
@@ -68,48 +91,54 @@ struct WavFile {
         uint8_t  tag[4];
         uint32_t size;
         void*    data;
-        void print() { printf("[Chunk '%.4s', Size %u bytes]\n", tag, size); }
+        void     print() { printf("[Chunk '%.4s', Size %u bytes]\n", tag, size); }
     };
 
     struct Chunks {
         uint32_t length;
-        Chunk*   data;
+        Chunk*   chunks;
 
         void print() {
             for (int64_t i = 0; i < length; i++)
-                data[i].print();
+                chunks[i].print();
         }
     } Chunks;
+
+    WavFile() {}
+    WavFile(const WavFile& other) = delete;
+    WavFile(WavFile&& other) {
+        Descriptor          = other.Descriptor;
+        Format              = other.Format;
+        Data                = other.Data;
+        other.Data.size     = 0;
+        other.Data.data     = nullptr;
+        Chunks              = other.Chunks;
+        other.Chunks.length = 0;
+        other.Chunks.chunks = nullptr;
+    }
 
     ~WavFile() {
         free(Data.data);
         for (int64_t i = 0; i < Chunks.length; i++)
-            free(Chunks.data[i].data);
-        free(Chunks.data);
+            free(Chunks.chunks[i].data);
+        free(Chunks.chunks);
     }
 
   private:
     static WavError readHeader(WavFile* wavfile, FILE* file) {
         // Read Descriptor
-        fread(&wavfile->Descriptor, sizeof(wavfile->Descriptor), 1, file);
-        if (wavfile->Descriptor.RIFF[0] != 'R' ||
-            wavfile->Descriptor.RIFF[1] != 'I' ||
-            wavfile->Descriptor.RIFF[2] != 'F' ||
-            wavfile->Descriptor.RIFF[3] != 'F')
+        readFile(&wavfile->Descriptor, file);
+        if (*(uint32_t*)wavfile->Descriptor.RIFF != *(uint32_t*)RIFF)
             return INVALID_DESCRIPTOR;
-        if (wavfile->Descriptor.WAVE[0] != 'W' ||
-            wavfile->Descriptor.WAVE[1] != 'A' ||
-            wavfile->Descriptor.WAVE[2] != 'V' ||
-            wavfile->Descriptor.WAVE[3] != 'E')
+        if (*(uint32_t*)wavfile->Descriptor.WAVE != *(uint32_t*)WAVE)
             return INVALID_DESCRIPTOR;
 
         // Read Format
-        fread(&wavfile->Format, sizeof(wavfile->Format), 1, file);
-        if (wavfile->Format.FMT[0] != 'f' || wavfile->Format.FMT[1] != 'm' ||
-            wavfile->Format.FMT[2] != 't' || wavfile->Format.FMT[3] != ' ')
+        readFile(&wavfile->Format, file);
+        if (*(uint32_t*)wavfile->Format.FMT != *(uint32_t*)fmt)
             return NO_FORMAT;
 
-        // Seek forward to the data chunk if format is longer
+        // Seek forward to the next chunk if format is longer
         if (wavfile->Format.formatSize > 16) {
             fseek(file, wavfile->Format.formatSize - 16, SEEK_CUR);
         }
@@ -120,8 +149,8 @@ struct WavFile {
     static Chunk readChunk(FILE* file) {
         // Read Chunk Header
         Chunk chunk;
-        fread(&chunk.tag, 4, 1, file);
-        fread(&chunk.size, 4, 1, file);
+        readFile(&chunk.tag, file);
+        readFile(&chunk.size, file);
 
         // Check for end-of-file or errors
         if (feof(file) || ferror(file)) {
@@ -131,7 +160,7 @@ struct WavFile {
 
         // Read Chunk Data
         chunk.data = malloc(chunk.size);
-        fread(chunk.data, chunk.size, 1, file);
+        readFile(chunk.data, chunk.size, file);
 
         return chunk;
     }
@@ -169,11 +198,11 @@ struct WavFile {
         Data.DATA[3] = tag[3];
 
         // Read Data chunk size
-        fread(&Data.dataSize, sizeof(Data.dataSize), 1, file);
+        fread(&Data.size, sizeof(Data.size), 1, file);
 
         // Read the Data
-        Data.data = malloc(Data.dataSize);
-        fread(Data.data, Data.dataSize, 1, file);
+        Data.data = malloc(Data.size);
+        fread(Data.data, Data.size, 1, file);
 
         return SUCCESS;
     }
@@ -187,7 +216,7 @@ struct WavFile {
         // Prepare dynamic array and allocate a generous initial capacity
         uint32_t chunksCapacity = 32;
         Chunks.length           = 0;
-        Chunks.data = (Chunk*)malloc(sizeof(Chunk) * chunksCapacity);
+        Chunks.chunks           = (Chunk*)malloc(sizeof(Chunk) * chunksCapacity);
 
         // Read Chunks
         bool foundData = false;
@@ -208,8 +237,8 @@ struct WavFile {
                 Data.DATA[3] = chunk.tag[3];
 
                 // Write size and data
-                Data.dataSize = chunk.size;
-                Data.data     = chunk.data;
+                Data.size = chunk.size;
+                Data.data = chunk.data;
 
                 foundData = true;
 
@@ -219,18 +248,18 @@ struct WavFile {
                 if (chunksCapacity <= Chunks.length) {
                     // Double Capacity when insufficent
                     chunksCapacity *= 2;
-                    Chunks.data     = (Chunk*)reallocarray(
-                        Chunks.data, chunksCapacity, sizeof(Chunk));
+                    Chunks.chunks   = (Chunk*)reallocarray(
+                        Chunks.chunks, chunksCapacity, sizeof(Chunk));
                 }
 
-                Chunks.data[Chunks.length] = chunk;
+                Chunks.chunks[Chunks.length] = chunk;
                 Chunks.length++;
             }
         }
 
         // Resize dynamic array to fit
-        Chunks.data =
-            (Chunk*)reallocarray(Chunks.data, Chunks.length, sizeof(Chunk));
+        Chunks.chunks =
+            (Chunk*)reallocarray(Chunks.chunks, Chunks.length, sizeof(Chunk));
 
         // Return with the appropiate error code
         return foundData ? SUCCESS : NO_DATA;
@@ -238,17 +267,17 @@ struct WavFile {
 
     void write(FILE* file) {
         // Write Header
-        fwrite(&Descriptor, sizeof(Descriptor), 1, file);
-        fwrite(&Format, sizeof(Format), 1, file);
+        writeFile(&Descriptor, file);
+        writeFile(&Format, file);
 
         // Write Data
-        fwrite(&Data, sizeof(Data) - sizeof(void*), 1, file);
-        fwrite(Data.data, Data.dataSize, 1, file);
+        writeFile(&Data, sizeof(Data) - sizeof(void*), file);
+        writeFile(Data.data, Data.size, file);
 
         // Write Chunks
         for (int64_t i = 0; i < Chunks.length; i++) {
-            fwrite(&Chunks.data[i], sizeof(Chunk) - sizeof(void*), 1, file);
-            fwrite(Chunks.data[i].data, Chunks.data[i].size, 1, file);
+            writeFile(&Chunks.chunks[i], sizeof(Chunk) - sizeof(void*), file);
+            writeFile(Chunks.chunks[i].data, Chunks.chunks[i].size, file);
         }
     }
 
@@ -256,7 +285,7 @@ struct WavFile {
         void* raw      = Data.data;
         int   channels = Format.channels;
         int   bits     = Format.bitsPerSample;
-        int   samples  = Data.dataSize / Format.blockSize;
+        int   samples  = Data.size / Format.blockSize;
 
         if (channels <= 1)
             return raw;
@@ -265,7 +294,7 @@ struct WavFile {
             return raw;
 
         if (bits == 8) {
-            int8_t* data = (int8_t*)malloc(samples * channels * sizeof(int8_t));
+            int8_t*  data        = (int8_t*)malloc(samples * channels * sizeof(int8_t));
             int8_t** channelData = (int8_t**)malloc(channels * sizeof(int8_t*));
 
             for (int i = 0; i < channels; i++)
@@ -344,12 +373,12 @@ struct WavFile {
     }
 
   public:
-#define READ_SAMPLES(type, scale)                                              \
-    for (uint32_t i = 0; i < samples; i++) {                                   \
-        for (uint32_t c = 0; c < channels; c++) {                              \
-            type sample = ((type*)Data.data)[i * channels + c];                \
-            data[c][i]  = sample * (scale);                                    \
-        }                                                                      \
+#define READ_SAMPLES(type, scale)                               \
+    for (uint32_t i = 0; i < samples; i++) {                    \
+        for (uint32_t c = 0; c < channels; c++) {               \
+            type sample = ((type*)Data.data)[i * channels + c]; \
+            data[c][i]  = sample * (scale);                     \
+        }                                                       \
     }
     WavData<float> getData() {
         // Not Supported
@@ -364,7 +393,7 @@ struct WavFile {
         }
 
         // Allocate space for data
-        uint32_t samples  = Data.dataSize / Format.blockSize;
+        uint32_t samples  = Data.size / Format.blockSize;
         uint32_t channels = Format.channels;
         float**  data     = (float**)malloc(channels * sizeof(float*));
         for (uint32_t i = 0; i < channels; i++) {
@@ -387,20 +416,20 @@ struct WavFile {
     }
 #undef READ_SAMPLES
 
-#define WRITE_SAMPLES(type, scale)                                             \
-    for (uint32_t i = 0; i < data.samples; i++) {                              \
-        for (uint32_t c = 0; c < data.channels; c++) {                         \
-            float sample = data.data[c][i];                                    \
-            sample       = fmax(fmin(sample, 1.0f - (scale)), -1.0f);          \
-            ((type*)Data.data)[i * data.channels + c] = sample / (scale);      \
-        }                                                                      \
+#define WRITE_SAMPLES(type, scale)                                                                 \
+    for (uint32_t i = 0; i < data.samples; i++) {                                                  \
+        for (uint32_t c = 0; c < data.channels; c++) {                                             \
+            float sample                              = data.data[c][i];                           \
+            sample                                    = fmax(fmin(sample, 1.0f - (scale)), -1.0f); \
+            ((type*)Data.data)[i * data.channels + c] = sample / (scale);                          \
+        }                                                                                          \
     }
     void setData(WavData<float> data) {
         if (data.channels != Format.channels) {
             printf("Error: Channel count mismatch\n");
             return;
         }
-        if (data.samples != Data.dataSize / Format.blockSize) {
+        if (data.samples != Data.size / Format.blockSize) {
             printf("Error: Sample count mismatch\n");
             return;
         }
@@ -443,10 +472,25 @@ struct WavFile {
         printf("BlockSize:     %d\n", Format.blockSize);
         printf("BitsPerSample: %d\n", Format.bitsPerSample);
         printf("DATA:         '%.4s'\n", Data.DATA);
-        printf("DataSize:      %d\n", Data.dataSize);
+        printf("DataSize:      %d\n", Data.size);
         Chunks.print();
     }
     static void print(WavFile& wavfile) { wavfile.print(); }
+};
+
+struct WavLoader {
+    static WavFile readFile(const char* path) {
+        FILE* file = fopen(path, "rb");
+        if (file == NULL) {
+            printf("Error: Could not open file %s\n", path);
+            return {};
+        }
+
+        WavFile wavfile;
+        wavfile.read(file);
+        fclose(file);
+        return wavfile;
+    }
 };
 
 #endif
